@@ -8,8 +8,8 @@ changes, and get an email when a price drops below your trigger.
 | Milestone | What | State |
 |---|---|---|
 | 1 | Search engine + command line | ✅ done |
-| 2 | Webpage (search form, results table, sorting) | next |
-| 3 | Saved watches, 15-minute price checks, email alerts, price history | |
+| 2 | Webpage: search form, live fare calendar, sortable results | ✅ done |
+| 3 | Saved watches, 15-minute price checks, email alerts, price history | next |
 | 4 | Deploy to Oracle Cloud Always Free | |
 
 ## How a flexible search works
@@ -52,11 +52,35 @@ All price sources implement `flighttracker/providers/base.py`, so a paid API can
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
 
-## Run it
+## Run the webpage
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python -m flighttracker.web          # then open http://localhost:8000
+```
+
+The page has every option above. While a search runs, a calendar of your departure window fills
+in with each day's cheapest fare (darker = cheaper) and yellow tags mark the top picks. Results can
+be re-sorted by price or travel time, and each trip expands to show every flight and layover with
+a link to open it on Google Flights. The page remembers your last search and recent routes, and a
+search keeps running on the server if you close the tab.
+
+Only one search runs at a time, to keep the pace polite; others wait in line.
+
+Settings (environment variables):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FT_PROVIDER` | `google-flights` | Price source, or `fake` for made-up prices |
+| `FT_MIN_DELAY` / `FT_MAX_DELAY` | `2` / `5` | Seconds between requests |
+| `FT_HOST` / `FT_PORT` | `127.0.0.1` / `8000` | Where the server listens |
+
+Try the page without touching Google: `FT_PROVIDER=fake FT_MIN_DELAY=0.05 FT_MAX_DELAY=0.1 python -m flighttracker.web`
+
+## Run from the command line
+
+```bash
 
 # Fort Lauderdale → New Delhi, leaving between Jan 5 and Feb 15, staying 20–25 days
 python -m flighttracker.cli FLL DEL --depart-from 2027-01-05 --depart-to 2027-02-15 --days 20-25
@@ -74,7 +98,7 @@ Run `python -m flighttracker.cli --help` for every option, including `--json` ou
 ## Tests
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 python -m pytest
 ```
 
@@ -85,6 +109,8 @@ flighttracker/
   models.py              trips, legs, segments, search options
   engine.py              flexible-date search, throttling, top-N per departure day
   cli.py                 command line
+  web.py                 web server: page, background searches, progress API
+  static/                the webpage (HTML, CSS, JS, bundled open-license fonts)
   providers/
     base.py              price-source interface
     google_flights.py    free Google Flights scraper

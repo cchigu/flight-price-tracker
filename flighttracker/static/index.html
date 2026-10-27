@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flight Price Tracker</title>
+  <meta name="description" content="Find the cheapest days to fly across flexible dates.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23F5C400'/><path d='M6 18l20-8-6 14-3-5-5 3z' fill='%23172033'/></svg>">
+  <link rel="preload" href="/static/fonts/big-shoulders-display-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/hanken-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <form id="search" class="panel" novalidate>
+      <header class="brand">
+        <h1>Flight Price Tracker</h1>
+        <p>Find the cheapest days to fly.</p>
+      </header>
+
+      <fieldset class="route">
+        <legend class="sr-only">Route</legend>
+        <label class="field code">
+          <span>From</span>
+          <input name="origin" maxlength="3" autocomplete="off" spellcheck="false" list="airports" required placeholder="FLL">
+        </label>
+        <button type="button" class="swap" id="swap" aria-label="Swap from and to">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h12l-3-3M17 17H5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <label class="field code">
+          <span>To</span>
+          <input name="destination" maxlength="3" autocomplete="off" spellcheck="false" list="airports" required placeholder="DEL">
+        </label>
+      </fieldset>
+      <div class="recent" id="recent" hidden></div>
+
+      <div class="segmented" role="radiogroup" aria-label="Trip type">
+        <label><input type="radio" name="trip_type" value="round-trip" checked><span>Round trip</span></label>
+        <label><input type="radio" name="trip_type" value="one-way"><span>One way</span></label>
+      </div>
+
+      <div class="pair">
+        <label class="field"><span>Leave as early as</span><input type="date" name="depart_from" required></label>
+        <label class="field"><span>Leave as late as</span><input type="date" name="depart_to" required></label>
+      </div>
+
+      <div class="pair" data-round-only>
+        <label class="field"><span>Shortest trip</span>
+          <span class="unit"><input type="number" name="min_days" min="1" max="60" inputmode="numeric" required><em>days</em></span></label>
+        <label class="field"><span>Longest trip</span>
+          <span class="unit"><input type="number" name="max_days" min="1" max="60" inputmode="numeric" required><em>days</em></span></label>
+      </div>
+
+      <div class="group">
+        <span class="group-label" id="stops-label">Flights</span>
+        <div class="segmented three" role="radiogroup" aria-labelledby="stops-label">
+          <label><input type="radio" name="stops" value="any" checked><span>Any</span></label>
+          <label><input type="radio" name="stops" value="direct"><span>Direct only</span></label>
+          <label><input type="radio" name="stops" value="connecting"><span>With stops</span></label>
+        </div>
+        <label class="field inline" data-stops-limit>
+          <span>Most stops each way</span>
+          <select name="max_stops"><option value="">No limit</option><option value="1">1</option><option value="2">2</option></select>
+        </label>
+      </div>
+
+      <div class="group">
+        <span class="group-label" id="rank-label">Show me</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="rank-label">
+          <label><input type="radio" name="rank_by" value="price" checked><span>Cheapest trips</span></label>
+          <label><input type="radio" name="rank_by" value="duration"><span>Shortest trips</span></label>
+        </div>
+      </div>
+
+      <details class="more">
+        <summary><span>More options</span><span class="summary-value" id="more-summary"></span></summary>
+        <div class="more-body">
+          <div class="pair">
+            <label class="field"><span>Cabin</span>
+              <select name="cabin">
+                <option value="economy">Economy</option>
+                <option value="premium-economy">Premium economy</option>
+                <option value="business">Business</option>
+                <option value="first">First</option>
+              </select></label>
+            <label class="field"><span>Currency</span>
+              <select name="currency">
+                <option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>CAD</option><option>AED</option>
+              </select></label>
+          </div>
+          <div class="pax">
+            <label class="field"><span>Adults</span><input type="number" name="adults" min="1" max="9" inputmode="numeric"></label>
+            <label class="field"><span>Children</span><input type="number" name="children" min="0" max="8" inputmode="numeric"></label>
+            <label class="field"><span>Infants in seat</span><input type="number" name="infants_in_seat" min="0" max="8" inputmode="numeric"></label>
+            <label class="field"><span>Infants on lap</span><input type="number" name="infants_on_lap" min="0" max="8" inputmode="numeric"></label>
+          </div>
+          <label class="field inline"><span>Number of results</span>
+            <select name="top_n"><option>5</option><option selected>10</option><option>15</option><option>20</option></select></label>
+        </div>
+      </details>
+
+      <p class="estimate" id="estimate" aria-live="polite"></p>
+      <button class="primary" type="submit" id="go">Find cheapest trips</button>
+    </form>
+
+    <main class="board" aria-live="polite">
+      <div class="board-head">
+        <h2 class="route-title" id="route-title"><span>FLL</span><svg viewBox="0 0 40 16" aria-hidden="true"><path d="M2 8h34m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>DEL</span></h2>
+        <div class="status" id="status" hidden>
+          <div class="bar" role="progressbar" aria-label="Search progress" aria-valuemin="0" aria-valuemax="100"><span id="bar"></span></div>
+          <div class="status-line">
+            <p id="status-text"></p>
+            <button type="button" class="link" id="stop" hidden>Stop search</button>
+          </div>
+        </div>
+      </div>
+
+      <section class="calendar-wrap" aria-labelledby="cal-h">
+        <h3 id="cal-h" class="section-h">Cheapest fare by departure day</h3>
+        <div class="calendar" id="calendar"></div>
+        <div class="legend" id="legend" hidden>
+          <span class="swatch-scale" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span id="legend-low"></span><span class="legend-mid">to</span><span id="legend-high"></span>
+          <span class="legend-rank"><b>1</b> Top pick</span>
+        </div>
+        <p class="empty" id="empty">Pick a route and a window of days you could leave. Each departure day fills in here with its cheapest fare as it's checked.</p>
+      </section>
+
+      <section class="results-wrap" id="results-wrap" hidden aria-labelledby="res-h">
+        <div class="results-head">
+          <h3 id="res-h" class="section-h">Best trips</h3>
+          <div class="sort" role="group" aria-label="Sort results">
+            <span>Sort by</span>
+            <button type="button" data-sort="price" aria-pressed="true">Price</button>
+            <button type="button" data-sort="duration" aria-pressed="false">Travel time</button>
+          </div>
+        </div>
+        <ol class="results" id="results"></ol>
+        <ul class="notes" id="notes"></ul>
+      </section>
+    </main>
+  </div>
+
+  <datalist id="airports">
+    <option value="FLL">Fort Lauderdale</option>
+    <option value="MIA">Miami</option>
+    <option value="MSY">New Orleans</option>
+    <option value="DEL">New Delhi</option>
+    <option value="BOM">Mumbai</option>
+    <option value="ATL">Atlanta</option>
+    <option value="JFK">New York JFK</option>
+    <option value="EWR">Newark</option>
+    <option value="ORD">Chicago O'Hare</option>
+    <option value="IAH">Houston</option>
+    <option value="DFW">Dallas/Fort Worth</option>
+    <option value="LAX">Los Angeles</option>
+    <option value="LHR">London Heathrow</option>
+    <option value="DXB">Dubai</option>
+    <option value="DOH">Doha</option>
+  </datalist>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
