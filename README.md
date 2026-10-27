@@ -52,7 +52,21 @@ All price sources implement `flighttracker/providers/base.py`, so a paid API can
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
 
-## Run the webpage
+## Open it in your browser (no install)
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cchigu/flight-price-tracker?quickstart=1)
+
+Click the button and choose **Create codespace**. GitHub builds a small cloud computer for you,
+installs everything and opens the webpage in a new tab (allow pop-ups if it doesn't appear, or
+open the **Ports** tab and click the globe icon next to port 8000). The first start takes 2–3
+minutes; later starts take seconds. The page link is private to your GitHub account.
+
+A codespace stops by itself after 30 idle minutes, so this is for searching while you're at the
+page. Searches that keep watching prices around the clock come with the Oracle server
+(milestone 4). GitHub's free plan includes 120 core-hours a month (about 60 hours on the default
+2-core machine).
+
+## Run the webpage on your own computer
 
 ```bash
 python -m venv .venv && source .venv/bin/activate

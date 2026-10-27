@@ -1,0 +1,17 @@
+{
+  "name": "Flight Price Tracker",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "hostRequirements": { "cpus": 2 },
+  "postCreateCommand": "pip install --user -r requirements.txt -r requirements-dev.txt",
+  "postAttachCommand": {
+    "webpage": "FT_HOST=0.0.0.0 FT_PORT=8000 python -m flighttracker.web"
+  },
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "Flight Price Tracker", "onAutoForward": "openBrowser" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] },
+    "vscode": { "extensions": ["ms-python.python"] }
+  }
+}
