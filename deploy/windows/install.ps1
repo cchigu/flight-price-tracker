@@ -170,10 +170,18 @@ $self = (& $Tailscale status --json 2>$null | Out-String | ConvertFrom-Json).Sel
 if (-not $self -or -not $self.DNSName) { throw "Tailscale isn't signed in yet. Sign in from the Tailscale icon in the taskbar, then run this again." }
 $Url = 'https://' + $self.DNSName.TrimEnd('.')
 
-Info "Turning on Funnel. If a link appears below, open it, approve Funnel, then come back here."
-& $Tailscale funnel --bg --https=443 $Port
-if ($LASTEXITCODE -ne 0) {
-  throw "Funnel didn't turn on. Approve it at the link above (or in the Tailscale admin console under Access controls), then run this again."
+Info "Turning on Funnel."
+$funnelOn = $false
+for ($try = 1; $try -le 4 -and -not $funnelOn; $try++) {
+  & $Tailscale funnel --bg --https=443 $Port
+  if ($LASTEXITCODE -eq 0) { $funnelOn = $true; break }
+  # The first time, Tailscale prints a link to enable Funnel (and HTTPS) for your account,
+  # and the command can quit before you've approved it. Wait for the person, then try again.
+  Write-Host ""
+  Read-Host "    Open the link above, enable Funnel (and HTTPS if asked), then press Enter here"
+}
+if (-not $funnelOn) {
+  throw "Funnel didn't turn on. Enable it in the Tailscale admin console (Access controls), then run this again."
 }
 
 # ---- 6. Stay awake ------------------------------------------------------------------------
