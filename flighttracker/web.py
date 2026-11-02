@@ -253,8 +253,36 @@ def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Thro
     return app
 
 
+def load_env_file(path: Path) -> None:
+    """Read KEY=VALUE lines into the environment (values already set win)."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+def _log_to_file(path: str) -> None:
+    """Send output to a log file. Needed when running hidden (pythonw has no console)."""
+    import sys
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if p.exists() and p.stat().st_size > 5_000_000:  # keep it from growing forever
+        p.replace(p.with_suffix(".old.log"))
+    f = open(p, "a", buffering=1, encoding="utf-8")
+    sys.stdout = sys.stderr = f
+
+
 def main() -> None:
+    # Settings can live in flight-tracker.env next to the code (used by the Windows installer).
+    load_env_file(Path(os.environ.get("FT_ENV_FILE", Path(__file__).resolve().parent.parent / "flight-tracker.env")))
+    if os.environ.get("FT_LOG_FILE"):
+        _log_to_file(os.environ["FT_LOG_FILE"])
     import uvicorn
+    # uvicorn's default log handlers bind to sys.stderr when it starts, so they follow the redirect above.
     uvicorn.run(create_app(), host=os.environ.get("FT_HOST", "127.0.0.1"), port=int(os.environ.get("FT_PORT", 8000)))
 
 

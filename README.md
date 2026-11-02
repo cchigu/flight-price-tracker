@@ -10,7 +10,7 @@ changes, and get an email when a price drops below your trigger.
 | 1 | Search engine + command line | ✅ done |
 | 2 | Webpage: search form, live fare calendar, sortable results | ✅ done |
 | 3 | Saved watches, 15-minute price checks, email alerts, price history | next |
-| 4 | Deploy to Oracle Cloud Always Free (permanent HTTPS link, password, auto-update) | ✅ setup script ready |
+| 4 | Permanent link: Windows PC + Tailscale Funnel, or Oracle Cloud (password, auto-update) | ✅ done |
 
 ## How a flexible search works
 
@@ -51,6 +51,35 @@ Google can change its page or refuse requests. When refused, the engine backs of
 All price sources implement `flighttracker/providers/base.py`, so a paid API can be added later in
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
+
+## Permanent link from your Windows PC (free)
+
+Runs the tracker on your own computer and gives it a fixed private address like
+`https://your-pc.your-tailnet.ts.net` through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel)
+(free for personal use). It works from your phone or any computer, but only while the PC is on and awake.
+
+Open **PowerShell** and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/cchigu/flight-price-tracker/main/deploy/windows/install.ps1 | iex
+```
+
+The installer:
+1. installs Python, Git and Tailscale if they're missing (Windows asks for permission)
+2. downloads the code to `%USERPROFILE%\flight-price-tracker` and asks you for a password for the page
+3. starts the tracker hidden in the background, and again every time you sign in to Windows
+4. signs you in to Tailscale (free account) and turns on Funnel. The first time, Tailscale shows
+   a link to approve Funnel; open it, approve, and the installer finishes
+5. offers to stop the PC from sleeping while it's plugged in
+6. prints your link and copies it to the clipboard
+
+It checks GitHub every 10 minutes and installs new code by itself, and restarts the tracker if it
+ever stops. Logs are in `%USERPROFILE%\flight-price-tracker\logs`. Run the same command again to
+repair it or change the password. To remove it:
+
+```powershell
+irm https://raw.githubusercontent.com/cchigu/flight-price-tracker/main/deploy/windows/uninstall.ps1 | iex
+```
 
 ## Permanent link on Oracle Cloud (free)
 
@@ -150,6 +179,8 @@ flighttracker/
   engine.py              flexible-date search, throttling, top-N per departure day
   cli.py                 command line
   web.py                 web server: page, background searches, progress API
+  auth.py                password sign-in
+  supervisor.py          keeps the server running on a home PC and pulls updates from GitHub
   static/                the webpage (HTML, CSS, JS, bundled open-license fonts)
   providers/
     base.py              price-source interface
