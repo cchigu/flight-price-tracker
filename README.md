@@ -52,6 +52,21 @@ All price sources implement `flighttracker/providers/base.py`, so a paid API can
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
 
+## Logins
+
+Turned on by setting `FT_PASSWORD` (both installers do). On first start that becomes the owner's
+password, with the sign-in name **admin** (change it with `FT_OWNER` before the first start).
+
+- The owner opens **People** to add a login for someone: pick their name, keep or change the
+  suggested starting password, and send them the link, name and password shown. **Reset password**
+  and **Remove** sign that person out everywhere.
+- Everyone can change their password and set an email for alerts under **Account**.
+- Searches are private to each person, and each person runs one search at a time. Searches from
+  everyone still take turns, one at a time, to keep the pace polite.
+
+Logins are stored in `data/tracker.db` (passwords as salted scrypt hashes). After the first start,
+the owner's password is changed under Account; editing `FT_PASSWORD` no longer changes it.
+
 ## Permanent link from your Windows PC (free)
 
 Runs the tracker on your own computer and gives it a fixed private address like

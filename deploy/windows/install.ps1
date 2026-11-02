@@ -198,7 +198,8 @@ Write-Host "All set. Your tracker is at:" -ForegroundColor Green
 Write-Host ""
 Write-Host "    $Url" -ForegroundColor Yellow
 Write-Host ""
-Info "Bookmark it on your phone and other computers. Sign in with your password."
+Info "Bookmark it on your phone and other computers. Sign in with the name admin and your password."
+Info "To give a friend their own login, open People at the top of the page."
 Info "It updates itself from GitHub every 10 minutes."
 Info "Logs: $LogDir"
 Info "To remove it: irm https://raw.githubusercontent.com/cchigu/flight-price-tracker/main/deploy/windows/uninstall.ps1 | iex"

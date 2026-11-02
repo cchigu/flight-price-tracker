@@ -12,8 +12,8 @@ TODAY = date.today()
 
 
 @pytest.fixture
-def client():
-    app = create_app(FakeProvider(), Throttle(0, 0, sleep=lambda s: None), password="")
+def client(tmp_path):
+    app = create_app(FakeProvider(), Throttle(0, 0, sleep=lambda s: None), password="", data_dir=tmp_path)
     with TestClient(app) as c:
         yield c
 
@@ -80,9 +80,9 @@ def test_options_pass_through(client):
     assert durs == sorted(durs)
 
 
-def test_cancel_and_missing(client):
+def test_cancel_and_missing(client, tmp_path):
     assert client.get("/api/searches/nope").status_code == 404
-    slow = create_app(FakeProvider(), Throttle(0.02, 0.02), password="")
+    slow = create_app(FakeProvider(), Throttle(0.02, 0.02), password="", data_dir=tmp_path / "slow")
     with TestClient(slow) as c:
         jid = c.post("/api/searches", json=body()).json()["id"]
         time.sleep(0.2)

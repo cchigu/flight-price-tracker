@@ -2,8 +2,10 @@
 
 Run:  python -m flighttracker.web          (then open http://localhost:8000)
 Env:  FT_PROVIDER=google-flights|fake  FT_MIN_DELAY=2  FT_MAX_DELAY=5  FT_HOST=0.0.0.0  FT_PORT=8000
-      FT_PASSWORD=...        require this password to use the page (do this on a public server)
-      FT_SECURE_COOKIE=1     only send the login cookie over HTTPS
+      FT_PASSWORD=...        owner's password; creates the owner login on first start (turns sign-in on)
+      FT_OWNER=admin         the owner's sign-in name (first start only)
+      FT_DATA_DIR=./data     where logins are stored
+      FT_SECURE_COOKIE=1     only send the sign-in cookie over HTTPS
 """
 
 from __future__ import annotations
@@ -16,20 +18,22 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal, Optional
-from urllib.parse import parse_qs
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .auth import COOKIE, PasswordGate, login_page
+from . import accounts
+from .auth import Gate
+from .users import UserStore
 
 from .engine import MAX_DAYS_AHEAD, MAX_PAIRS, FlexibleSearch, Throttle, estimate_minutes, pick_top, run_search
 from .models import Passengers, SearchOptions, TripResult
 from .providers import PriceProvider, get_provider
 
 STATIC = Path(__file__).parent / "static"
+ROOT = Path(__file__).resolve().parent.parent
 JOB_TTL_S = 6 * 3600   # finished searches are kept for 6 hours
 MAX_JOBS = 50
 
@@ -78,6 +82,7 @@ class SearchIn(BaseModel):
 class Job:
     id: str
     request: FlexibleSearch
+    owner: Optional[int] = None   # user id; None when sign-in is off
     status: Literal["queued", "running", "done", "cancelled", "failed"] = "queued"
     checks_done: int = 0
     checks_total: int = 0
@@ -125,9 +130,15 @@ class SearchRunner:
         self.jobs: dict[str, Job] = {}
         self._gate = threading.Lock()
 
-    def submit(self, req: FlexibleSearch) -> Job:
+    def active_for(self, owner: Optional[int]) -> Optional[Job]:
+        return next((j for j in self.jobs.values()
+                     if j.owner == owner and j.status in ("queued", "running")), None)
+
+    def submit(self, req: FlexibleSearch, owner: Optional[int] = None) -> Job:
         self._cleanup()
-        job = Job(id=uuid.uuid4().hex[:12], request=req, checks_total=len(req.date_pairs()))
+        if owner is not None and self.active_for(owner) is not None:
+            raise ValueError("You already have a search running. Stop it or wait for it to finish first.")
+        job = Job(id=uuid.uuid4().hex[:12], request=req, owner=owner, checks_total=len(req.date_pairs()))
         self.jobs[job.id] = job
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"search-{job.id}").start()
         return job
@@ -159,6 +170,13 @@ class SearchRunner:
                 job.status, job.error = "failed", str(e)
             job.finished = time.time()
 
+    def forget_user(self, owner: int) -> None:
+        """Stop and drop everything a removed person had."""
+        for jid, j in list(self.jobs.items()):
+            if j.owner == owner:
+                j.cancel.set()
+                del self.jobs[jid]
+
     def _cleanup(self) -> None:
         now = time.time()
         for jid, j in list(self.jobs.items()):
@@ -171,39 +189,36 @@ class SearchRunner:
 
 # ---------- app ------------------------------------------------------------------------
 def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Throttle] = None,
-               password: Optional[str] = None) -> FastAPI:
+               password: Optional[str] = None, data_dir: Optional[Path] = None) -> FastAPI:
     provider = provider or get_provider(os.environ.get("FT_PROVIDER", "google-flights"))
     throttle = throttle or Throttle(float(os.environ.get("FT_MIN_DELAY", 2)), float(os.environ.get("FT_MAX_DELAY", 5)))
     password = password if password is not None else os.environ.get("FT_PASSWORD", "")
+    data_dir = Path(data_dir or os.environ.get("FT_DATA_DIR") or ROOT / "data")
+    users = UserStore(data_dir)
+    users.ensure_owner(os.environ.get("FT_OWNER", "admin"), password)
     runner = SearchRunner(provider, throttle)
     app = FastAPI(title="Flight Price Tracker", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.runner = runner
+    app.state.users = users
 
     @app.get("/healthz")
     def healthz():
         return {"ok": True}
 
-    if password:
-        gate = PasswordGate(password, secure_cookie=os.environ.get("FT_SECURE_COOKIE") == "1")
-        app.middleware("http")(gate)
+    gate = Gate(users, secure_cookie=os.environ.get("FT_SECURE_COOKIE") == "1")
+    app.middleware("http")(gate)
+    accounts.register(app, gate)
 
-        @app.get("/login")
-        def login_form(request: Request):
-            if gate.valid(request.cookies.get(COOKIE)):
-                return RedirectResponse("/", status_code=303)
-            return login_page()
+    def owner_of(request: Request) -> Optional[int]:
+        u = request.state.user
+        return u.id if u is not None else None
 
-        @app.post("/login")
-        async def login(request: Request):
-            form = parse_qs((await request.body()).decode("utf-8", "replace"))
-            attempt = (form.get("password") or [""])[0]
-            who = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0].strip()
-            error = gate.check_password(who, attempt)
-            if error:
-                return login_page(error)
-            resp = RedirectResponse("/", status_code=303)
-            gate.set_cookie(resp)
-            return resp
+    def find_job(request: Request, job_id: str, gone: str) -> Job:
+        job = runner.jobs.get(job_id)
+        # Someone else's search looks the same as one that doesn't exist.
+        if not job or job.owner != owner_of(request):
+            raise HTTPException(404, gone)
+        return job
 
     def build(body: SearchIn) -> FlexibleSearch:
         req = body.to_request()
@@ -225,22 +240,26 @@ def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Thro
         return {"checks": len(req.date_pairs()), "minutes": round(estimate_minutes(req, throttle), 1)}
 
     @app.post("/api/searches", status_code=201)
-    def start(body: SearchIn):
-        job = runner.submit(build(body))
+    def start(body: SearchIn, request: Request):
+        try:
+            job = runner.submit(build(body), owner_of(request))
+        except ValueError as e:
+            raise HTTPException(409, str(e))
         return job.snapshot() | {"queue_position": runner.queue_position(job)}
 
+    @app.get("/api/searches/active")
+    def active(request: Request):
+        job = runner.active_for(owner_of(request))
+        return {"id": job.id if job else None}
+
     @app.get("/api/searches/{job_id}")
-    def status(job_id: str):
-        job = runner.jobs.get(job_id)
-        if not job:
-            raise HTTPException(404, "This search has expired. Start a new one.")
+    def status(job_id: str, request: Request):
+        job = find_job(request, job_id, "This search has expired. Start a new one.")
         return job.snapshot() | {"queue_position": runner.queue_position(job)}
 
     @app.post("/api/searches/{job_id}/cancel")
-    def cancel(job_id: str):
-        job = runner.jobs.get(job_id)
-        if not job:
-            raise HTTPException(404, "This search has expired.")
+    def cancel(job_id: str, request: Request):
+        job = find_job(request, job_id, "This search has expired.")
         job.cancel.set()
         return {"id": job.id, "status": "cancelling"}
 

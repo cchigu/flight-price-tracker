@@ -381,7 +381,23 @@ $("#results").addEventListener("click", (e) => {
   if (open) openRows.add(row.dataset.id); else openRows.delete(row.dataset.id);
 });
 
+async function showWho() {
+  try {
+    const me = await api("/api/me");
+    if (!me.signed_in) return;
+    $("#who-name").textContent = me.name;
+    $("#who-people").hidden = !me.is_owner;
+    $("#who").hidden = false;
+  } catch { /* sign-in off */ }
+}
+$("#sign-out").addEventListener("click", async () => {
+  await fetch("/logout", { method: "POST" });
+  store.del("ft.job");
+  window.location.href = "/login";
+});
+
 (async function init() {
+  showWho();
   const saved = store.get("ft.form", null);
   const v = { ...defaults(), ...(saved || {}) };
   // Don't restore a window that's already in the past.
@@ -395,7 +411,9 @@ $("#results").addEventListener("click", (e) => {
     form.elements.depart_from.max = form.elements.depart_to.max = state.config.max_date;
   } catch { /* page still works */ }
   syncForm();
-  const jobId = store.get("ft.job", null);
+  // Pick up a search still running for you, even one started on another device.
+  let jobId = store.get("ft.job", null);
+  if (!jobId) { try { jobId = (await api("/api/searches/active")).id; } catch { /* ignore */ } }
   if (jobId) {
     try { const job = await api(`/api/searches/${jobId}`); state.sortBy = readForm().rank_by; showJob(job); poll(); }
     catch { store.del("ft.job"); }
