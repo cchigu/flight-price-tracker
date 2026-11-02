@@ -18,6 +18,10 @@ NOTICES = {
     "added": "Login added. Send them the link, their name and the password below.",
     "reset": "Password reset. Send them the new one below.",
     "removed": "Login removed. They've been signed out.",
+    "summary-on": "Daily summary turned on. It arrives each morning around 8.",
+    "summary-off": "Daily summary turned off.",
+    "mail-saved": "Email sending saved. Send a test email to check it works.",
+    "mail-test": "Test email sent. Check your inbox (and spam folder).",
 }
 
 
@@ -107,13 +111,38 @@ def register(app: FastAPI, gate: Gate) -> None:
 </section>
 <section class="card">
   <h2>Email for price alerts</h2>
-  <p class="hint">Price-drop alerts will go here once alerts are switched on.</p>
+  <p class="hint">Price alerts and your daily summary go here.</p>
   <form method="post" action="/account/email" class="stack">
     <label class="field"><span>Email</span><input type="email" name="email" value="{esc(u.email)}" autocomplete="email"></label>
     <button class="primary" type="submit">Save email</button>
   </form>
-</section>"""
+  <form method="post" action="/account/summary" class="stack">
+    <label class="check"><input type="checkbox" name="on" value="1" {'checked' if u.daily_summary else ''}>
+      <span>Also send me a summary of everything I'm watching each morning</span></label>
+    <button class="secondary" type="submit">Save</button>
+  </form>
+</section>
+{owner_mail_section(request) if u.is_owner else ''}"""
         return page("Your account", body, 400 if error else 200, u)
+
+    def owner_mail_section(request: Request) -> str:
+        st = request.app.state.watches
+        sender = st.get_setting("smtp_user", "")
+        has_pw = bool(st.get_setting("smtp_password", ""))
+        status = (f"Sending from <strong>{esc(sender)}</strong>." if sender and has_pw
+                  else "Not set up yet, so no alert emails can go out.")
+        return f"""<section class="card">
+  <h2>Sending emails (owner)</h2>
+  <p class="hint">{status} Alerts for everyone are sent from one Gmail account. It needs 2-Step Verification
+  and an app password from <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>
+  (16 letters). A separate Gmail just for this is a good idea.</p>
+  <form method="post" action="/account/mail" class="stack">
+    <label class="field"><span>Gmail address to send from</span><input type="email" name="user" value="{esc(sender)}" autocomplete="off"></label>
+    <label class="field"><span>App password</span><input type="password" name="password" autocomplete="new-password" placeholder="{'Saved; leave empty to keep it' if has_pw else 'xxxx xxxx xxxx xxxx'}"></label>
+    <div class="button-row"><button class="primary" type="submit" name="action" value="save">Save</button>
+    <button class="secondary" type="submit" name="action" value="test">Save and send a test email</button></div>
+  </form>
+</section>"""
 
     @app.get("/account")
     def account(request: Request):
@@ -148,6 +177,40 @@ def register(app: FastAPI, gate: Gate) -> None:
             return account_page(request, str(e))
         return RedirectResponse("/account?done=email", status_code=303)
 
+    @app.post("/account/summary")
+    async def change_summary(request: Request):
+        u = request.state.user
+        if u is None:
+            return RedirectResponse("/", status_code=303)
+        on = (await _form(request)).get("on") == "1"
+        users.set_daily_summary(u.id, on)
+        return RedirectResponse(f"/account?done=summary-{'on' if on else 'off'}", status_code=303)
+
+    @app.post("/account/mail")
+    async def change_mail(request: Request):
+        u = request.state.user
+        if u is None or not u.is_owner:
+            return RedirectResponse("/", status_code=303)
+        f = await _form(request)
+        st = request.app.state.watches
+        sender = f.get("user", "").strip()
+        if sender and "@" not in sender:
+            return account_page(request, "That doesn't look like a Gmail address.")
+        st.set_setting("smtp_user", sender)
+        if f.get("password", "").strip():
+            st.set_setting("smtp_password", f["password"].strip())
+        if f.get("action") == "test":
+            to = u.email or sender
+            if not to:
+                return account_page(request, "Add your email above first, so the test has somewhere to go.")
+            try:
+                request.app.state.mailer.send(to, "Flight Price Tracker test email",
+                                              "Email sending works. Price alerts will arrive like this.")
+            except Exception as e:
+                return account_page(request, str(e))
+            return RedirectResponse("/account?done=mail-test", status_code=303)
+        return RedirectResponse("/account?done=mail-saved", status_code=303)
+
     # ---- people (owner only) ---------------------------------------------------------------
     def people_page(request: Request, error: str = "", done: str = "", shown: tuple[str, str] | None = None,
                     form_name: str = ""):
@@ -170,7 +233,7 @@ def register(app: FastAPI, gate: Gate) -> None:
                 actions = '<span class="hint">You</span>' if u.id == me.id else ""
             else:
                 actions = f"""<form method="post" action="/people/{u.id}/reset"><button class="link" type="submit">Reset password</button></form>
-<form method="post" action="/people/{u.id}/remove" onsubmit="return confirm('Remove {esc(u.name)}? They will be signed out and lose their saved searches.')"><button class="link danger" type="submit">Remove</button></form>"""
+<form method="post" action="/people/{u.id}/remove" onsubmit="return confirm('Remove {esc(u.name)}? They will be signed out and their watches deleted.')"><button class="link danger" type="submit">Remove</button></form>"""
             rows.append(f"""<li class="person"><div><span><strong>{esc(u.name)}</strong>{' <span class="tag">Owner</span>' if u.is_owner else ''}</span>
 <span class="hint">{esc(u.email) or 'No email yet'}, added {esc(since)}</span></div><div class="person-actions">{actions}</div></li>""")
         body = f"""<h1>People</h1>
@@ -228,4 +291,5 @@ def register(app: FastAPI, gate: Gate) -> None:
         except ValueError as e:
             return people_page(request, str(e))
         app.state.runner.forget_user(user_id)
+        app.state.watches.delete_for_user(user_id)
         return RedirectResponse("/people?done=removed", status_code=303)

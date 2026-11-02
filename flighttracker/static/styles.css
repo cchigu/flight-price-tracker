@@ -297,6 +297,46 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .notes:empty { display: none; }
 .no-results { padding: 8px 0; color: var(--slate); margin: 0; }
 
+/* ---------- price alerts ---------- */
+.secondary {
+  min-height: 44px; padding: 0 18px; border-radius: 10px; cursor: pointer;
+  border: 1.5px solid var(--ink); background: transparent; color: var(--ink); font-weight: 700;
+}
+.secondary:hover { background: var(--fog); }
+.alert-box { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+.alert-box .hint { margin-top: -4px; }
+.watch-msg { margin: 0; font-size: 0.9rem; }
+.watch-msg:empty { display: none; }
+.watch-msg.error { color: var(--danger); }
+.watch-msg a { color: var(--ink); font-weight: 600; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.detail-actions .secondary { min-height: 40px; }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--ink); }
+.button-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.button-row .primary { padding: 0 22px; min-height: 46px; font-size: 1rem; }
+.notice.warn { background: color-mix(in srgb, var(--signal) 28%, var(--paper)); }
+.notice a { color: var(--ink); font-weight: 600; }
+
+.watches { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.watch { background: var(--paper); border-radius: 14px; padding: 18px 20px; display: grid; gap: 10px; border-left: 6px solid var(--line); }
+.watch.hit { border-left-color: var(--signal); }
+.watch-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.watch-head h2 { margin: 0 0 2px; font-size: 1.05rem; }
+.watch-price { text-align: right; display: grid; justify-items: end; gap: 4px; }
+.watch-price strong { font-size: 1.5rem; line-height: 1; }
+.watch-price .tag { margin-left: 0; }
+.watch .hint a { color: var(--ink); font-weight: 600; }
+.spark { margin: 0; display: grid; gap: 4px; }
+.spark svg { width: 100%; max-width: 420px; height: 70px; }
+.spark-line { fill: none; stroke: var(--teal-4); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark-dot { fill: var(--teal-5); }
+.spark-trigger { stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.watch-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.trigger-form { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.trigger-form .field { width: 220px; }
+.watch-links { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
 /* ---------- sign-in, account and people pages ---------- */
 .login-body { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .login { position: static; width: min(380px, 100%); }
@@ -318,6 +358,8 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .card { background: var(--paper); border-radius: 14px; padding: 20px; display: grid; gap: 14px; }
 .card h2 { margin: 0; font-size: 1.05rem; }
 .stack { display: grid; gap: 14px; }
+.stack .secondary { justify-self: start; }
+.hint a { color: var(--ink); font-weight: 600; }
 .stack .primary { justify-self: start; padding: 0 22px; min-height: 46px; font-size: 1rem; }
 .hint { color: var(--slate); font-size: 0.88rem; margin: 0; }
 .people { list-style: none; margin: 0; padding: 0; }

@@ -84,6 +84,12 @@ function syncForm() {
   const travellers = p.adults + p.children + p.infants_in_seat + p.infants_on_lap;
   const cabin = form.elements.cabin.selectedOptions[0]?.textContent ?? "";
   $("#more-summary").textContent = `${cabin}, ${travellers} ${travellers === 1 ? "traveler" : "travelers"}, ${b.currency}`;
+  $("#alert-cur").textContent = b.currency;
+  const fixed = b.depart_from && b.depart_from === b.depart_to && (b.trip_type === "one-way" || b.min_days === b.max_days);
+  $("#watch").textContent = fixed ? "Watch these dates" : "Watch this search";
+  $("#watch-hint").textContent = fixed
+    ? "One departure date and trip length: checked every 15 minutes."
+    : "Flexible dates: the whole window is rechecked every 6 hours.";
   if (!state.job || state.job.final) setRouteTitle(b.origin || "···", b.destination || "···");
   store.set("ft.form", flatForm());
   scheduleEstimate();
@@ -331,7 +337,10 @@ function tripHTML(t, pos, job) {
       ${legHTML("Outbound", t.depart_date, t.outbound)}
       ${t.return_date ? (t.inbound ? legHTML("Return", t.return_date, t.inbound)
         : `<p class="unknown">Return flight details weren't available. Open the trip on Google Flights to see them.</p>`) : ""}
-      <a class="book" href="${esc(t.search_url)}" target="_blank" rel="noopener">Open on Google Flights</a>
+      <div class="detail-actions">
+        <a class="book" href="${esc(t.search_url)}" target="_blank" rel="noopener">Open on Google Flights</a>
+        ${state.signedIn ? `<button type="button" class="secondary watch-trip" data-depart="${t.depart_date}" data-days="${t.trip_days ?? ""}">Watch these dates</button>` : ""}
+      </div>
     </div>
   </li>`;
 }
@@ -388,12 +397,47 @@ async function showWho() {
     $("#who-name").textContent = me.name;
     $("#who-people").hidden = !me.is_owner;
     $("#who").hidden = false;
+    state.signedIn = true;
+    $$("[data-signed-in]").forEach((el) => { el.hidden = false; });
+    if (state.job) showJob(state.job);
   } catch { /* sign-in off */ }
 }
 $("#sign-out").addEventListener("click", async () => {
   await fetch("/logout", { method: "POST" });
   store.del("ft.job");
   window.location.href = "/login";
+});
+
+function alertPrice() {
+  const v = parseInt(form.elements.alert_price.value, 10);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+async function saveWatch(search, msgEl) {
+  msgEl.classList.remove("error");
+  msgEl.textContent = "Saving…";
+  try {
+    const res = await api("/api/watches", { search, trigger: alertPrice() });
+    msgEl.innerHTML = `${esc(res.message)} <a href="/watches">See your watches</a>`;
+  } catch (e) {
+    msgEl.textContent = e.message;
+    msgEl.classList.add("error");
+  }
+}
+
+$("#watch").addEventListener("click", () => saveWatch(readForm(), $("#watch-msg")));
+
+$("#results").addEventListener("click", (e) => {
+  const btn = e.target.closest(".watch-trip");
+  if (!btn || !state.job) return;
+  const b = readForm();
+  const days = btn.dataset.days ? parseInt(btn.dataset.days, 10) : 0;
+  const search = { ...b, origin: state.job.origin, destination: state.job.destination,
+    depart_from: btn.dataset.depart, depart_to: btn.dataset.depart,
+    trip_type: days ? "round-trip" : "one-way", min_days: days || 1, max_days: days || 1 };
+  let msg = btn.parentElement.querySelector(".watch-msg");
+  if (!msg) { msg = document.createElement("p"); msg.className = "watch-msg"; msg.setAttribute("role", "status"); btn.parentElement.after(msg); }
+  saveWatch(search, msg);
 });
 
 (async function init() {

@@ -18,6 +18,7 @@
         <p>Find the cheapest days to fly.</p>
         <nav class="who" id="who" hidden aria-label="Account">
           <span id="who-name"></span>
+          <a href="/watches">Watches</a>
           <a href="/people" id="who-people" hidden>People</a>
           <a href="/account">Account</a>
           <button type="button" class="link" id="sign-out">Sign out</button>
@@ -107,6 +108,17 @@
 
       <p class="estimate" id="estimate" aria-live="polite"></p>
       <button class="primary" type="submit" id="go">Find cheapest trips</button>
+
+      <div class="alert-box" data-signed-in hidden>
+        <span class="group-label" id="alert-label">Price alert</span>
+        <label class="field">
+          <span>Email me when it's at or below</span>
+          <span class="unit"><input type="number" name="alert_price" min="1" inputmode="numeric" placeholder="Optional"><em id="alert-cur">USD</em></span>
+        </label>
+        <button type="button" class="secondary" id="watch">Watch this search</button>
+        <p class="hint" id="watch-hint"></p>
+        <p class="watch-msg" id="watch-msg" role="status" aria-live="polite"></p>
+      </div>
     </form>
 
     <main class="board" aria-live="polite">

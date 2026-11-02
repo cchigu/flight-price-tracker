@@ -9,7 +9,7 @@ changes, and get an email when a price drops below your trigger.
 |---|---|---|
 | 1 | Search engine + command line | ✅ done |
 | 2 | Webpage: search form, live fare calendar, sortable results | ✅ done |
-| 3 | Saved watches, 15-minute price checks, email alerts, price history | next |
+| 3 | Watches: 15-minute / 6-hour price checks, email alerts, daily summary, price history | ✅ done |
 | 4 | Permanent link: Windows PC + Tailscale Funnel, or Oracle Cloud (password, auto-update) | ✅ done |
 
 ## How a flexible search works
@@ -51,6 +51,31 @@ Google can change its page or refuse requests. When refused, the engine backs of
 All price sources implement `flighttracker/providers/base.py`, so a paid API can be added later in
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
+
+## Watches and price alerts
+
+Signed-in people can watch a search and get an email when the price drops:
+
+- **Watch these dates** (in an expanded result, or the form with one departure day and one trip
+  length) is checked **every 15 minutes** with a single price request.
+- **Watch this search** with a range of dates rescans the whole window **every 6 hours**
+  (each scan is one request per date combination, so more often would get blocked).
+- Set **Email me when it's at or below** to get alerts. You're emailed the first time the price
+  reaches it, then again only if it drops a further 25 or more, or after it goes back above the
+  alert price and drops below again. Undelivered alerts are retried on the next check.
+- Optional **daily summary** of everything you watch, around 8 AM (turn on under Account).
+- The **Watches** page shows each watch's latest price, best option, a 30-day price chart,
+  and lets you change the alert price, check now, pause or delete.
+- Limits per person: 10 fixed-date and 3 flexible-date watches. Watches end once their dates pass.
+
+Checks share the one-at-a-time lane with searches; if Google refuses requests, all checks
+pause for 30 minutes.
+
+**Email setup (owner, once):** alerts are sent from one Gmail account. Turn on 2-Step
+Verification for it, create an app password at <https://myaccount.google.com/apppasswords>, then
+enter the address and app password under **Account → Sending emails** and use
+**Save and send a test email**. They're stored in `data/tracker.db` on the server.
+A separate Gmail account just for this is a good idea.
 
 ## Logins
 
@@ -196,6 +221,10 @@ flighttracker/
   web.py                 web server: page, background searches, progress API
   auth.py                password sign-in
   supervisor.py          keeps the server running on a home PC and pulls updates from GitHub
+  watches.py             saved watches, price history, the alert rule
+  checker.py             background price checks, alert and daily-summary emails
+  mailer.py              Gmail sending
+  watch_pages.py         the Watches page
   static/                the webpage (HTML, CSS, JS, bundled open-license fonts)
   providers/
     base.py              price-source interface

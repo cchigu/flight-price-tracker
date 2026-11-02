@@ -24,9 +24,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import accounts
+from urllib.parse import urlsplit
+
+from . import accounts, watch_pages
 from .auth import Gate
+from .checker import Checker
+from .mailer import Mailer
 from .users import UserStore
+from .watches import WatchStore
 
 from .engine import MAX_DAYS_AHEAD, MAX_PAIRS, FlexibleSearch, Throttle, estimate_minutes, pick_top, run_search
 from .models import Passengers, SearchOptions, TripResult
@@ -128,7 +133,7 @@ class SearchRunner:
         self.provider = provider
         self.throttle = throttle
         self.jobs: dict[str, Job] = {}
-        self._gate = threading.Lock()
+        self.lane = threading.Lock()  # one Google-facing job at a time: searches and watch checks
 
     def active_for(self, owner: Optional[int]) -> Optional[Job]:
         return next((j for j in self.jobs.values()
@@ -148,7 +153,7 @@ class SearchRunner:
         return next((i + 1 for i, j in enumerate(waiting) if j.id == job.id), 0)
 
     def _run(self, job: Job) -> None:
-        with self._gate:
+        with self.lane:
             if job.cancel.is_set():
                 job.status, job.finished = "cancelled", time.time()
                 return
@@ -189,7 +194,8 @@ class SearchRunner:
 
 # ---------- app ------------------------------------------------------------------------
 def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Throttle] = None,
-               password: Optional[str] = None, data_dir: Optional[Path] = None) -> FastAPI:
+               password: Optional[str] = None, data_dir: Optional[Path] = None,
+               mailer=None, start_checker: Optional[bool] = None) -> FastAPI:
     provider = provider or get_provider(os.environ.get("FT_PROVIDER", "google-flights"))
     throttle = throttle or Throttle(float(os.environ.get("FT_MIN_DELAY", 2)), float(os.environ.get("FT_MAX_DELAY", 5)))
     password = password if password is not None else os.environ.get("FT_PASSWORD", "")
@@ -205,9 +211,35 @@ def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Thro
     def healthz():
         return {"ok": True}
 
+    watches = WatchStore(data_dir)
+    mailer = mailer or Mailer(watches.get_setting)
+    checker = Checker(watches, users, runner, mailer)
+    app.state.watches, app.state.mailer, app.state.checker = watches, mailer, checker
+    if start_checker if start_checker is not None else os.environ.get("FT_CHECKER", "1") != "0":
+        checker.start()
+
     gate = Gate(users, secure_cookie=os.environ.get("FT_SECURE_COOKIE") == "1")
     app.middleware("http")(gate)
+
+    # Remember the address people reach the site at, for links in emails. The browser's Referer
+    # carries it even when the server only sees 127.0.0.1 behind Tailscale or Caddy.
+    seen = {"url": watches.get_setting("public_url", "")}
+
+    @app.middleware("http")
+    async def remember_public_url(request: Request, call_next):
+        ref = request.headers.get("referer", "")
+        if ref:
+            parts = urlsplit(ref)
+            host = parts.hostname or ""
+            if parts.scheme in ("http", "https") and host and not host.startswith(("127.", "localhost")) and host != "::1":
+                url = f"{parts.scheme}://{parts.netloc}"
+                if url != seen["url"]:
+                    seen["url"] = url
+                    watches.set_setting("public_url", url)
+        return await call_next(request)
+
     accounts.register(app, gate)
+    watch_pages.register(app, watches, checker)
 
     def owner_of(request: Request) -> Optional[int]:
         u = request.state.user

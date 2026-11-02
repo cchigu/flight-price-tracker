@@ -31,6 +31,8 @@ class User:
     email: str
     session_version: int
     created: float
+    daily_summary: bool = False
+    last_summary: str = ""
 
 
 def _hash(password: str, salt: Optional[bytes] = None) -> str:
@@ -76,6 +78,12 @@ class UserStore:
             email TEXT NOT NULL DEFAULT '',
             session_version INTEGER NOT NULL DEFAULT 1,
             created REAL NOT NULL)""")
+        # Columns added after the first release.
+        have = {r["name"] for r in self._db.execute("PRAGMA table_info(users)")}
+        if "daily_summary" not in have:
+            self._db.execute("ALTER TABLE users ADD COLUMN daily_summary INTEGER NOT NULL DEFAULT 0")
+        if "last_summary" not in have:
+            self._db.execute("ALTER TABLE users ADD COLUMN last_summary TEXT NOT NULL DEFAULT ''")
         self._db.commit()
         self.secret = self._load_secret(data_dir / "secret.key")
 
@@ -96,7 +104,8 @@ class UserStore:
     def _user(row) -> Optional[User]:
         if row is None:
             return None
-        return User(row["id"], row["name"], bool(row["is_owner"]), row["email"], row["session_version"], row["created"])
+        return User(row["id"], row["name"], bool(row["is_owner"]), row["email"], row["session_version"],
+                    row["created"], bool(row["daily_summary"]), row["last_summary"])
 
     def get(self, user_id: int) -> Optional[User]:
         with self._lock:
@@ -157,6 +166,16 @@ class UserStore:
             raise ValueError("That doesn't look like an email address.")
         with self._lock:
             self._db.execute("UPDATE users SET email=? WHERE id=?", (email, user_id))
+            self._db.commit()
+
+    def set_daily_summary(self, user_id: int, on: bool) -> None:
+        with self._lock:
+            self._db.execute("UPDATE users SET daily_summary=? WHERE id=?", (int(on), user_id))
+            self._db.commit()
+
+    def mark_summary_sent(self, user_id: int, day: str) -> None:
+        with self._lock:
+            self._db.execute("UPDATE users SET last_summary=? WHERE id=?", (day, user_id))
             self._db.commit()
 
     def remove(self, user_id: int) -> None:

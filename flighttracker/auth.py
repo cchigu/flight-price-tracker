@@ -108,7 +108,7 @@ def page(title: str, body: str, status: int = 200, user: Optional[User] = None) 
     nav = ""
     if user is not None:
         people = '<a href="/people">People</a>' if user.is_owner else ""
-        nav = (f'<nav class="page-nav"><a href="/">Search</a>{people}<a href="/account">Your account</a>'
+        nav = (f'<nav class="page-nav"><a href="/">Search</a><a href="/watches">Watches</a>{people}<a href="/account">Your account</a>'
                f'<form method="post" action="/logout"><button class="link" type="submit">Sign out</button></form></nav>')
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
