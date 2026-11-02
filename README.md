@@ -10,7 +10,7 @@ changes, and get an email when a price drops below your trigger.
 | 1 | Search engine + command line | ✅ done |
 | 2 | Webpage: search form, live fare calendar, sortable results | ✅ done |
 | 3 | Saved watches, 15-minute price checks, email alerts, price history | next |
-| 4 | Deploy to Oracle Cloud Always Free | |
+| 4 | Deploy to Oracle Cloud Always Free (permanent HTTPS link, password, auto-update) | ✅ setup script ready |
 
 ## How a flexible search works
 
@@ -52,7 +52,33 @@ All price sources implement `flighttracker/providers/base.py`, so a paid API can
 one file without touching the rest. `fake` is an offline source with repeatable made-up prices for
 testing.
 
-## Open it in your browser (no install)
+## Permanent link on Oracle Cloud (free)
+
+`deploy/oracle/setup.sh` turns a fresh Ubuntu 24.04 server into a private, always-on copy of the
+tracker at `https://<server-ip-with-dashes>.sslip.io`, behind a password, with a free HTTPS
+certificate. Every 10 minutes it checks GitHub `main` and installs any new code by itself, so
+pushing to this repo is all it takes to update the live site.
+
+1. Sign up at oracle.com/cloud/free (card is for identity only; Always Free resources aren't charged).
+2. **Compute → Instances → Create instance**
+   - Image: **Canonical Ubuntu 24.04**
+   - Shape: **VM.Standard.A1.Flex** (1 OCPU, 6 GB) or **VM.Standard.E2.1.Micro**; both are Always Free
+   - Networking: keep the defaults with **Assign a public IPv4 address** on
+   - SSH keys: let it generate a key pair and download the private key (only needed for fixing things)
+   - **Advanced options → Management → Paste cloud-init script**: paste
+     [`deploy/oracle/cloud-init.sh`](deploy/oracle/cloud-init.sh) after changing the password in it
+3. Open the web ports: on the instance page click the **Subnet** link → **Security** (or
+   **Security Lists**) → **Default Security List** → **Add Ingress Rules**, source `0.0.0.0/0`,
+   TCP, destination port `80,443`.
+4. About 5 minutes after the instance shows **Running**, open
+   `https://<public-ip-with-dashes>.sslip.io` (e.g. `129.146.10.20` becomes
+   `https://129-146-10-20.sslip.io`) and sign in.
+
+On the server: `journalctl -u flight-tracker -f` shows the app log, `sudo flight-tracker-update`
+updates right away, and the setup log is `/var/log/flight-tracker-setup.log`. To change the
+password, edit `FT_PASSWORD` in `/etc/flight-tracker.env` and run `sudo systemctl restart flight-tracker`.
+
+## Open it in GitHub Codespaces (no install)
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/cchigu/flight-price-tracker?quickstart=1)
 

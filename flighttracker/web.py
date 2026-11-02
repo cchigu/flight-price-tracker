@@ -2,6 +2,8 @@
 
 Run:  python -m flighttracker.web          (then open http://localhost:8000)
 Env:  FT_PROVIDER=google-flights|fake  FT_MIN_DELAY=2  FT_MAX_DELAY=5  FT_HOST=0.0.0.0  FT_PORT=8000
+      FT_PASSWORD=...        require this password to use the page (do this on a public server)
+      FT_SECURE_COOKIE=1     only send the login cookie over HTTPS
 """
 
 from __future__ import annotations
@@ -14,11 +16,14 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from .auth import COOKIE, PasswordGate, login_page
 
 from .engine import MAX_DAYS_AHEAD, MAX_PAIRS, FlexibleSearch, Throttle, estimate_minutes, pick_top, run_search
 from .models import Passengers, SearchOptions, TripResult
@@ -165,12 +170,40 @@ class SearchRunner:
 
 
 # ---------- app ------------------------------------------------------------------------
-def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Throttle] = None) -> FastAPI:
+def create_app(provider: Optional[PriceProvider] = None, throttle: Optional[Throttle] = None,
+               password: Optional[str] = None) -> FastAPI:
     provider = provider or get_provider(os.environ.get("FT_PROVIDER", "google-flights"))
     throttle = throttle or Throttle(float(os.environ.get("FT_MIN_DELAY", 2)), float(os.environ.get("FT_MAX_DELAY", 5)))
+    password = password if password is not None else os.environ.get("FT_PASSWORD", "")
     runner = SearchRunner(provider, throttle)
-    app = FastAPI(title="Flight Price Tracker")
+    app = FastAPI(title="Flight Price Tracker", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.runner = runner
+
+    @app.get("/healthz")
+    def healthz():
+        return {"ok": True}
+
+    if password:
+        gate = PasswordGate(password, secure_cookie=os.environ.get("FT_SECURE_COOKIE") == "1")
+        app.middleware("http")(gate)
+
+        @app.get("/login")
+        def login_form(request: Request):
+            if gate.valid(request.cookies.get(COOKIE)):
+                return RedirectResponse("/", status_code=303)
+            return login_page()
+
+        @app.post("/login")
+        async def login(request: Request):
+            form = parse_qs((await request.body()).decode("utf-8", "replace"))
+            attempt = (form.get("password") or [""])[0]
+            who = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0].strip()
+            error = gate.check_password(who, attempt)
+            if error:
+                return login_page(error)
+            resp = RedirectResponse("/", status_code=303)
+            gate.set_cookie(resp)
+            return resp
 
     def build(body: SearchIn) -> FlexibleSearch:
         req = body.to_request()

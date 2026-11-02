@@ -121,6 +121,7 @@ async function api(path, body) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { window.location.href = "/login"; throw new Error("Signed out."); }
   if (!res.ok) {
     let msg = data.detail;
     if (Array.isArray(msg)) msg = msg.map((d) => d.msg).join(" ");
