@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     if not report.results:
         print("No trips found.")
         return 1
-    print(f"\nTop {len(report.results)} by {a.sort} (each departure day once):\n")
+    print(f"\nTop {len(report.results)} by {a.sort} (each date combination once):\n")
     print(f"{'#':>2}  {'Depart':<10}  {'Return':<10}  {'Days':>4}  {'Price':>8}  {'Stops':>5}  {'Travel time':>12}  Airlines")
     for i, t in enumerate(report.results, 1):
         it = t.itinerary

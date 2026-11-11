@@ -64,7 +64,7 @@ def test_full_search_flow(client):
     job = wait(client, r.json()["id"])
     assert job["status"] == "done" and job["final"]
     assert len(job["results"]) == 10
-    assert len({t["depart_date"] for t in job["results"]}) == 10
+    assert len({(t["depart_date"], t["return_date"]) for t in job["results"]}) == 10
     assert len(job["days"]) == 21  # every departure day got a cheapest fare for the calendar
     assert all(t["inbound"] for t in job["results"])
     assert min(job["days"].values()) == job["results"][0]["price"]

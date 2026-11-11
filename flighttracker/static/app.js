@@ -249,7 +249,9 @@ function renderCalendar(job, results) {
     const below = prices.filter((x) => x < p).length;   // rank-based, so colors spread across the range
     return 5 - Math.min(4, Math.floor((below / prices.length) * 5));
   };
-  const rankOf = new Map(results.map((t, i) => [t.depart_date, i + 1]));
+  // A day can hold several top picks now; tag it with its best rank.
+  const rankOf = new Map();
+  results.forEach((t, i) => { if (!rankOf.has(t.depart_date)) rankOf.set(t.depart_date, i + 1); });
   const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="cal-dow" aria-hidden="true">${d}</div>`).join("");
 
   // One continuous grid: only the weeks your departure window touches, Monday first.

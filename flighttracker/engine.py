@@ -3,8 +3,9 @@
 How a scan works:
   1. Build every (departure, return) pair: each departure day in the window x each trip length.
   2. Price each pair with one request (round-trip totals), slowly, in shuffled order.
-  3. For each departure day keep only its single best option (so no day repeats).
-  4. Take the best N departure days, then look up return-leg details for just those N.
+  3. Keep the best option for each (departure, return) pair, so no combination repeats.
+     A departure day can appear several times with different return days.
+  4. Take the best N combinations, then look up return-leg details for just those N.
 """
 
 from __future__ import annotations
@@ -138,14 +139,16 @@ def _key(rank_by: RankBy):
 
 
 def pick_top(candidates: list[TripResult], top_n: int, rank_by: RankBy) -> list[TripResult]:
-    """Best option per departure day, then the best `top_n` days. A departure day never repeats."""
+    """The best `top_n` date combinations. Each (departure, return) pair appears once;
+    the same departure day may appear again with a different return day."""
     key = _key(rank_by)
-    best_per_day: dict[date, TripResult] = {}
+    best: dict[tuple[date, Optional[date]], TripResult] = {}
     for c in candidates:
-        cur = best_per_day.get(c.depart_date)
+        pair = (c.depart_date, c.return_date)
+        cur = best.get(pair)
         if cur is None or key(c) < key(cur):
-            best_per_day[c.depart_date] = c
-    return sorted(best_per_day.values(), key=key)[:top_n]
+            best[pair] = c
+    return sorted(best.values(), key=key)[:top_n]
 
 
 def sort_results(results: list[TripResult], by: RankBy) -> list[TripResult]:

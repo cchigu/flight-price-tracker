@@ -20,8 +20,9 @@ You give a route, a departure window and a trip length range (e.g. **20–25 day
    with 20–25 day trips is 42 × 6 = 252 price checks.
 2. Each pair is priced with one request (round-trip total), spaced 2–5 seconds apart in shuffled
    order so it doesn't hammer Google.
-3. For each departure day only its single best option is kept, **so a departure day never repeats**.
-4. The best 10 departure days are returned, then their return-leg details are looked up
+3. Each departure/return combination is kept once, **so no combination repeats**. The same
+   departure day can appear more than once with different return days.
+4. The best 10 combinations are returned, then their return-leg details are looked up
    (10 extra requests).
 
 "Trip length" is the number of days between departure and return: leaving Jan 5 with a 20-day trip

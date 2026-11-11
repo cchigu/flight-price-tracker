@@ -65,17 +65,20 @@ def test_layovers_count_toward_duration():
     assert l.total_duration_min == 270
 
 
-def test_pick_top_never_repeats_a_departure_day():
+def test_pick_top_keeps_each_combination_once_but_days_can_repeat():
     d = TODAY + timedelta(days=50)
     dep = datetime.combine(d, datetime.min.time())
     mk = lambda day_off, ret_off, price: TripResult(
         d + timedelta(days=day_off), d + timedelta(days=ret_off),
         Itinerary(price, "USD", ("X",), leg(dep, 100)))
-    cands = [mk(0, 20, 300), mk(0, 21, 250), mk(0, 22, 400), mk(1, 21, 260), mk(2, 22, 999)]
+    cands = [mk(0, 20, 300), mk(0, 21, 250), mk(0, 22, 400), mk(1, 21, 260), mk(2, 22, 999),
+             mk(0, 21, 275)]  # same combination again, pricier: dropped
     top = pick_top(cands, 10, "price")
-    assert [t.depart_date for t in top] == [d, d + timedelta(days=1), d + timedelta(days=2)]
-    assert top[0].itinerary.price == 250  # cheapest return kept for that day
-    assert len({t.depart_date for t in top}) == len(top)
+    assert [t.itinerary.price for t in top] == [250, 260, 300, 400, 999]
+    assert [t.depart_date for t in top].count(d) == 3          # one day, three return dates
+    pairs = [(t.depart_date, t.return_date) for t in top]
+    assert len(set(pairs)) == len(pairs)                       # no combination twice
+    assert [t.itinerary.price for t in pick_top(cands, 2, "price")] == [250, 260]
 
 
 def test_full_scan_with_fake_provider():
@@ -84,7 +87,7 @@ def test_full_scan_with_fake_provider():
     rep = run_search(r, p, NO_WAIT, shuffle_seed=1)
     assert rep.complete
     assert len(rep.results) == 10
-    assert len({t.depart_date for t in rep.results}) == 10
+    assert len({(t.depart_date, t.return_date) for t in rep.results}) == 10
     prices = [t.itinerary.price for t in rep.results]
     assert prices == sorted(prices)
     assert all(t.itinerary.inbound is not None for t in rep.results)
