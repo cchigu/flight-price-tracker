@@ -34,7 +34,7 @@ def test_parses_round_trip_options(monkeypatch):
         seen["url"] = q.url()
         return fake_results()
 
-    monkeypatch.setattr(gf.ff, "get_flights", fake_get)
+    monkeypatch.setattr(gf, "fetch_all_options", fake_get)
     p = gf.GoogleFlightsProvider()
     out = p.search("FLL", "MSY", date(2027, 1, 10), date(2027, 1, 30),
                    SearchOptions(cabin="business", passengers=Passengers(adults=2), currency="EUR"))
@@ -62,9 +62,33 @@ def test_block_and_error_mapping(monkeypatch):
     def broken(*a, **k):
         raise ValueError("parse failure")
 
-    monkeypatch.setattr(gf.ff, "get_flights", blocked)
+    monkeypatch.setattr(gf, "fetch_all_options", blocked)
     with pytest.raises(ProviderBlocked):
         p.search("FLL", "MSY", date(2027, 1, 10), None, SearchOptions())
-    monkeypatch.setattr(gf.ff, "get_flights", broken)
+    monkeypatch.setattr(gf, "fetch_all_options", broken)
     with pytest.raises(ProviderError):
         p.search("FLL", "MSY", date(2027, 1, 10), None, SearchOptions())
+
+
+def test_reads_top_flights_as_well_as_other_flights(monkeypatch):
+    """Google's cheapest fares are often only in its "Top flights" list."""
+    import json
+    import fast_flights.fetcher as fetcher
+    import fast_flights.parser as parser
+
+    seen = {}
+
+    def fake_parse(payload, **kw):
+        seen["payload"], seen["kw"] = payload, kw
+        return fake_results()
+
+    html = '<html><script class="ds:1">AF_initDataCallback({key: "ds:1", data:' + json.dumps([1, 2, 3]) + ', sideChannel: {}});</script></html>'
+    monkeypatch.setattr(fetcher, "fetch_flights_html", lambda q, proxy=None: html)
+    monkeypatch.setattr(parser, "parse_payload", fake_parse)
+    out = gf.fetch_all_options(object())
+    assert seen["kw"] == {"include_top_results": True} and seen["payload"] == [1, 2, 3]
+    assert len(out) == 2
+
+    monkeypatch.setattr(fetcher, "fetch_flights_html", lambda q, proxy=None: "<html>unusual traffic</html>")
+    with pytest.raises(ProviderBlocked):
+        gf.GoogleFlightsProvider().search("FLL", "MSY", date(2027, 1, 10), None, SearchOptions())

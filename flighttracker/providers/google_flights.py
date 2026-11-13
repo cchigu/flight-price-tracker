@@ -21,6 +21,27 @@ except ImportError:  # pragma: no cover
 _BLOCK_HINTS = ("blocked", "rate-limited", "HTTP 429", "HTTP 403", "unusual traffic", "captcha")
 
 
+def fetch_all_options(q, proxy=None):
+    """Every option Google shows for a query: its "Top flights" list and its "Other flights" list.
+
+    The scraper's own get_flights() reads only the "Other" list from the page, which misses the
+    cheapest fares whenever Google puts them under "Top flights". Same single page request; we
+    just read both lists.
+    """
+    import json
+
+    from fast_flights.fetcher import fetch_flights_html
+    from fast_flights.parser import parse_payload
+    from selectolax.lexbor import LexborHTMLParser
+
+    html = fetch_flights_html(q, proxy=proxy)
+    script = LexborHTMLParser(html).css_first(r"script.ds\:1")
+    if script is None:
+        raise RuntimeError("Could not find flight data in the page. It may have been blocked by Google.")
+    payload = json.loads(script.text().split("data:", 1)[1].rsplit(",", 1)[0])
+    return parse_payload(payload, include_top_results=True)
+
+
 def _to_dt(sd) -> datetime:
     y, m, d = sd.date
     hh, mm = (list(sd.time) + [0, 0])[:2]
@@ -90,7 +111,7 @@ class GoogleFlightsProvider(PriceProvider):
 
     def search(self, origin, destination, depart, return_date, options) -> list[Itinerary]:
         q = self._query(origin, destination, depart, return_date, options)
-        results = self._call(ff.get_flights, q, proxy=self.proxy)
+        results = self._call(fetch_all_options, q, proxy=self.proxy)
         diag = getattr(results, "diagnostics", None)
         if diag is not None and getattr(diag, "status", "") == "blocked":
             raise ProviderBlocked("Google Flights refused the request.")
